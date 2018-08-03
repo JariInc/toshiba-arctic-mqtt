@@ -1,3 +1,10 @@
+/*
+ * Based on work of 
+ *   https://github.com/markszabo/IRremoteESP8266/blob/master/examples/TurnOnToshibaAC/TurnOnToshibaAC.ino
+ *   https://github.com/knolleary/pubsubclient/blob/master/examples/mqtt_esp8266/mqtt_esp8266.ino
+ *   https://arduinojson.org/v5/example/parser/
+ */
+
 // Bundled ESP8266WiFi headers
 #include <ESP8266WiFi.h>
 
@@ -12,7 +19,10 @@
 #include <ArduinoJson.h>
 
 // Configuration
-#define IR_LED D2 // IR led at pin D2
+// IR led at pin D2
+#define IR_LED D2 
+// Comment to disable serial monitor
+#define DEBUG
 
 const char* ssid = "";
 const char* password = "";
@@ -27,22 +37,28 @@ DynamicJsonBuffer jsonBuffer;
 
 void setup_wifi() {
   delay(10);
-  // We start by connecting to a WiFi network
+
+  #ifdef DEBUG
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
-
-  WiFi.begin(ssid, password);
+  #endif
+  
+  WiFi.begin(ssid, password); 
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
+    #ifdef DEBUG
     Serial.print(".");
+    #endif
   }
-  
+
+  #ifdef DEBUG
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+  #endif
 }
 
 void printState() {
@@ -59,7 +75,8 @@ void printState() {
   Serial.println();
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {
+void handle_subscription(char* topic, byte* payload, unsigned int length) {
+  #ifdef DEBUG
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -67,10 +84,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print((char)payload[i]);
   }
   Serial.println();
-
+  #endif
+  
   JsonObject& root = jsonBuffer.parseObject(payload);
   if (!root.success()) {
+    #ifdef DEBUG
     Serial.println("JSON parsing failed");
+    #endif
     return;
   }
 
@@ -86,43 +106,53 @@ void callback(char* topic, byte* payload, unsigned int length) {
     toshibair.off();
   }
 
-  Serial.print("AC mode ");
-  Serial.println(ac_mode);
-
   if(strcmp(ac_mode, "COOL") == 0) {
-    Serial.println("set COOL");
     toshibair.setMode(TOSHIBA_AC_COOL);
   } else if(strcmp(ac_mode, "HEAT") == 0) {
-    Serial.println("set HEAT");
     toshibair.setMode(TOSHIBA_AC_HEAT);
   } else {
+    #ifdef DEBUG
     Serial.println("Unknown AC mode");
+    #endif
     return;
   }
   
   toshibair.setFan(fan);
   toshibair.setTemp(temp);
-  
+
+  #ifdef DEBUG
   printState();
   Serial.println("Sending IR command to A/C ...");
+  #endif
+  
   toshibair.send();
 }
 
 void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
+    #ifdef DEBUG
     Serial.print("Attempting MQTT connection...");
+    #endif
+    
     // Attempt to connect
     if (client.connect(client_id)) {
+      #ifdef DEBUG
       Serial.println("connected");
+      #endif
       if(client.subscribe(sub_topic)) {
+        #ifdef DEBUG
         Serial.print("Subscribed to ");
         Serial.println(sub_topic);
+        #endif
       }
     } else {
+      #ifdef DEBUG
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
+      #endif
+      
       // Wait 5 seconds before retrying
       delay(5000);
     }
@@ -133,7 +163,7 @@ void setup() {
   Serial.begin(115200);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
+  client.setCallback(handle_subscription);
   toshibair.begin();
 }
 
