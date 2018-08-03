@@ -102,23 +102,22 @@ void handle_subscription(char* topic, byte* payload, unsigned int length) {
   // handle payload
   if(power) {
     toshibair.on();
+    if(strcmp(ac_mode, "COOL") == 0) {
+      toshibair.setMode(TOSHIBA_AC_COOL);
+    } else if(strcmp(ac_mode, "HEAT") == 0) {
+      toshibair.setMode(TOSHIBA_AC_HEAT);
+    } else {
+      #ifdef DEBUG
+      Serial.println("Unknown AC mode");
+      #endif
+      return;
+    }
+    
+    toshibair.setFan(fan);
+    toshibair.setTemp(temp);
   } else {
     toshibair.off();
   }
-
-  if(strcmp(ac_mode, "COOL") == 0) {
-    toshibair.setMode(TOSHIBA_AC_COOL);
-  } else if(strcmp(ac_mode, "HEAT") == 0) {
-    toshibair.setMode(TOSHIBA_AC_HEAT);
-  } else {
-    #ifdef DEBUG
-    Serial.println("Unknown AC mode");
-    #endif
-    return;
-  }
-  
-  toshibair.setFan(fan);
-  toshibair.setTemp(temp);
 
   #ifdef DEBUG
   printState();
