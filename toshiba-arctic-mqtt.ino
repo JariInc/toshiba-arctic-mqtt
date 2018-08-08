@@ -21,44 +21,37 @@
 // Configuration
 // IR led at pin D2
 #define IR_LED D2 
-// Comment to disable serial monitor
-#define DEBUG
 
 const char* ssid = "";
 const char* password = "";
 const char* mqtt_server = "";
 const char* client_id = "";
 const char* sub_topic = "";
+const char* state_topic = "";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 IRToshibaAC toshibair(IR_LED);
-DynamicJsonBuffer jsonBuffer;
 
 void setup_wifi() {
   delay(10);
 
-  #ifdef DEBUG
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
-  #endif
   
   WiFi.begin(ssid, password); 
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    #ifdef DEBUG
     Serial.print(".");
-    #endif
+    ESP.wdtFeed();
   }
 
-  #ifdef DEBUG
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
-  #endif
 }
 
 void printState() {
@@ -75,8 +68,47 @@ void printState() {
   Serial.println();
 }
 
+void publishState() {
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  
+  root["power"] = toshibair.getPower();
+  root["temperature"] = toshibair.getTemp();
+  root["fan"] = toshibair.getFan();
+
+  int mode = toshibair.getMode();
+
+  if(mode == TOSHIBA_AC_COOL) {
+    root["mode"] = "COOL";
+  } else if(mode == TOSHIBA_AC_HEAT) {
+    root["mode"] = "HEAT";
+  } else if(mode == TOSHIBA_AC_AUTO) {
+    root["mode"] = "AUTO";
+  }
+
+  char output[200];
+  root.printTo(output);
+
+  client.publish(state_topic, output);
+
+  Serial.println("Published: ");
+  Serial.println(output);
+ }
+
+void handle_led() {
+  static int led_state = 0;
+  static int ttl = 16;
+
+  if(led_state == 0) {
+    digitalWrite(BUILTIN_LED, LOW);
+    led_state = 1;
+  } else {
+    digitalWrite(BUILTIN_LED, HIGH);
+    led_state = 0;
+  }
+}
+
 void handle_subscription(char* topic, byte* payload, unsigned int length) {
-  #ifdef DEBUG
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -84,13 +116,11 @@ void handle_subscription(char* topic, byte* payload, unsigned int length) {
     Serial.print((char)payload[i]);
   }
   Serial.println();
-  #endif
   
+  DynamicJsonBuffer jsonBuffer;
   JsonObject& root = jsonBuffer.parseObject(payload);
   if (!root.success()) {
-    #ifdef DEBUG
     Serial.println("JSON parsing failed");
-    #endif
     return;
   }
 
@@ -98,7 +128,7 @@ void handle_subscription(char* topic, byte* payload, unsigned int length) {
   const char* ac_mode = root["mode"];
   long temp = root["temperature"];
   long fan = root["fan"];
-  
+
   // handle payload
   if(power) {
     toshibair.on();
@@ -106,10 +136,10 @@ void handle_subscription(char* topic, byte* payload, unsigned int length) {
       toshibair.setMode(TOSHIBA_AC_COOL);
     } else if(strcmp(ac_mode, "HEAT") == 0) {
       toshibair.setMode(TOSHIBA_AC_HEAT);
+    } else if(strcmp(ac_mode, "AUTO") == 0) {
+      toshibair.setMode(TOSHIBA_AC_AUTO);
     } else {
-      #ifdef DEBUG
       Serial.println("Unknown AC mode");
-      #endif
       return;
     }
     
@@ -119,38 +149,30 @@ void handle_subscription(char* topic, byte* payload, unsigned int length) {
     toshibair.off();
   }
 
-  #ifdef DEBUG
   printState();
+  publishState();
   Serial.println("Sending IR command to A/C ...");
-  #endif
   
   toshibair.send();
+  handle_led();
 }
 
 void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
-    #ifdef DEBUG
     Serial.print("Attempting MQTT connection...");
-    #endif
     
     // Attempt to connect
     if (client.connect(client_id)) {
-      #ifdef DEBUG
       Serial.println("connected");
-      #endif
       if(client.subscribe(sub_topic)) {
-        #ifdef DEBUG
         Serial.print("Subscribed to ");
         Serial.println(sub_topic);
-        #endif
       }
     } else {
-      #ifdef DEBUG
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
-      #endif
       
       // Wait 5 seconds before retrying
       delay(5000);
@@ -159,11 +181,15 @@ void reconnect() {
 }
 
 void setup() {
+  pinMode(BUILTIN_LED, OUTPUT);
+  digitalWrite(BUILTIN_LED, LOW);
+  ESP.wdtEnable(1000);
   Serial.begin(115200);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(handle_subscription);
   toshibair.begin();
+  digitalWrite(BUILTIN_LED, HIGH);
 }
 
 void loop() {
@@ -171,4 +197,5 @@ void loop() {
     reconnect();
   }
   client.loop();
+  ESP.wdtFeed();
 }
