@@ -19,8 +19,8 @@
 #include <ArduinoJson.h>
 
 // Configuration
-// IR led at pin D2
-#define IR_LED D2 
+// IR led send at pin D3 (https://wiki.wemos.cc/products:d1_mini_shields:ir_controller_shield)
+#define IR_LED D3
 
 const char* ssid = "";
 const char* password = "";
