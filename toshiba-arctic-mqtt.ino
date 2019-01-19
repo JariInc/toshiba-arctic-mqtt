@@ -12,6 +12,7 @@
 #include <PubSubClient.h>
 
 // IRremoteESP8266 https://github.com/markszabo/IRremoteESP8266
+#include <IRremoteESP8266.h>
 #include <IRsend.h>
 #include <ir_Toshiba.h>
 
@@ -78,11 +79,11 @@ void publishState() {
 
   int mode = toshibair.getMode();
 
-  if(mode == TOSHIBA_AC_COOL) {
+  if(mode == kToshibaAcCool) {
     root["mode"] = "COOL";
-  } else if(mode == TOSHIBA_AC_HEAT) {
+  } else if(mode == kToshibaAcHeat) {
     root["mode"] = "HEAT";
-  } else if(mode == TOSHIBA_AC_AUTO) {
+  } else if(mode == kToshibaAcAuto) {
     root["mode"] = "AUTO";
   }
 
@@ -133,11 +134,16 @@ void handle_subscription(char* topic, byte* payload, unsigned int length) {
   if(power) {
     toshibair.on();
     if(strcmp(ac_mode, "COOL") == 0) {
-      toshibair.setMode(TOSHIBA_AC_COOL);
+      toshibair.setMode(kToshibaAcCool);
     } else if(strcmp(ac_mode, "HEAT") == 0) {
-      toshibair.setMode(TOSHIBA_AC_HEAT);
+      // set mode auto when temp > 25 for max power output
+      if(temp >= 25) {
+        toshibair.setMode(kToshibaAcAuto);
+      } else { 
+        toshibair.setMode(kToshibaAcHeat);
+      }
     } else if(strcmp(ac_mode, "AUTO") == 0) {
-      toshibair.setMode(TOSHIBA_AC_AUTO);
+      toshibair.setMode(kToshibaAcAuto);
     } else {
       Serial.println("Unknown AC mode");
       return;
